@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 import sys
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from keep_alive import keep_alive
+from keep_alive import keep_alive, add_log, update_stats
 import select
 import tty
 import termios
@@ -50,20 +50,14 @@ logger = logging.getLogger(__name__)
 
 class DebugLogger:
     def __init__(self):
-        self.logs = []
-        self.max_logs = 1000
-        self.lock = threading.Lock()
+        pass
     
     def add_log(self, level, message):
-        with self.lock:
-            timestamp = time.strftime('%H:%M:%S')
-            self.logs.append(f"[{timestamp}] {level}: {message}")
-            if len(self.logs) > self.max_logs:
-                self.logs.pop(0)
+        # Send logs to web interface instead of storing locally
+        add_log(level, message)
     
     def get_recent_logs(self, count=50):
-        with self.lock:
-            return self.logs[-count:] if self.logs else []
+        return []  # Not needed for web interface
 
 debug_logger = DebugLogger()
 
@@ -298,8 +292,6 @@ class ContinuousRegistrationManager:
         self.total_orders_created = 0
         self.lock = threading.Lock()
         self.running = True
-        self.show_debug = False
-        self.show_success_only = False
         
     def worker_task(self, worker_id):
         """Worker function that runs continuously"""
@@ -313,6 +305,7 @@ class ContinuousRegistrationManager:
                 
                 with self.lock:
                     self.total_accounts_logged += 1
+                    update_stats(accounts=self.total_accounts_logged)
                 
                 registrar.add_bank_card(user_data)
                 
@@ -320,89 +313,18 @@ class ContinuousRegistrationManager:
                 
                 with self.lock:
                     self.total_orders_created += orders_created
+                    update_stats(orders=self.total_orders_created)
                 
                 save_invite_code(user_data['inviteCode'])
                         
             except Exception as e:
                 debug_logger.add_log("ERROR", f"Worker exception: {e}")
     
-    def progress_reporter(self):
-        """Reports progress bars continuously"""
-        while self.running:
-            if self.show_success_only:
-                logs = debug_logger.get_recent_logs(100)
-                success_logs = [log for log in logs if "SUCCESS" in log]
-                print("\033[2J\033[H")
-                print("="*80)
-                print("SUCCESS LOGS ONLY (Press 'k' again to return to progress view)")
-                print("="*80)
-                for log in success_logs[-50:]:
-                    print(log)
-                print("="*80)
-            elif not self.show_debug:
-                with self.lock:
-                    accounts_bar = '█' * min(50, self.total_accounts_logged // 10) + '░' * max(0, 50 - min(50, self.total_accounts_logged // 10))
-                    orders_bar = '█' * min(50, self.total_orders_created // 100) + '░' * max(0, 50 - min(50, self.total_orders_created // 100))
-                    
-                    print(f"\rAccounts: [{accounts_bar}] {self.total_accounts_logged:>6} | Orders: [{orders_bar}] {self.total_orders_created:>8} | Press 'l' for logs, 'k' for success", end='', flush=True)
-            
-            time.sleep(1)
-    
-    def keyboard_listener(self):
-        """Listen for keyboard input (Unix only)"""
-        old_settings = termios.tcgetattr(sys.stdin)
-        try:
-            tty.setraw(sys.stdin.fileno())
-            while self.running:
-                if select.select([sys.stdin], [], [], 0.1) == ([sys.stdin], [], []):
-                    char = sys.stdin.read(1)
-                    if char.lower() == 'l':
-                        self.toggle_debug_view()
-                    elif char.lower() == 'k':
-                        self.toggle_success_view()
-        finally:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-    
-    def toggle_debug_view(self):
-        """Toggle between progress view and debug log view"""
-        self.show_debug = not self.show_debug
-        self.show_success_only = False
-        
-        if self.show_debug:
-            print("\n" + "="*80)
-            print("DEBUG LOGS (Press 'l' again to return to progress view)")
-            print("="*80)
-            logs = debug_logger.get_recent_logs(50)
-            for log in logs:
-                print(log)
-            print("="*80)
-        else:
-            print("\nReturning to progress view...")
-    
-    def toggle_success_view(self):
-        """Toggle between progress view and success-only log view"""
-        self.show_success_only = not self.show_success_only
-        self.show_debug = False
-        
-        if self.show_success_only:
-            print("\n" + "="*80)
-            print("SUCCESS LOGS ONLY (Press 'k' again to return to progress view)")
-            print("="*80)
-            logs = debug_logger.get_recent_logs(100)
-            success_logs = [log for log in logs if "SUCCESS" in log]
-            for log in success_logs[-50:]:
-                print(log)
-            print("="*80)
-        else:
-            print("\nReturning to progress view...")
-    
     def run_continuous_registration(self):
         """Run registration continuously with multiple threads"""
-        progress_thread = threading.Thread(target=self.progress_reporter, daemon=True)
-        progress_thread.start()
-        
-        keyboard_thread = threading.Thread(target=self.keyboard_listener, daemon=True)
-        keyboard_thread.start()
+        add_log("INFO", f"Starting registration bot with {self.num_threads} threads")
+        add_log("INFO", "Visit http://localhost:8080/logs to view live logs")
+        add_log("INFO", "Visit http://localhost:8080/success for success logs only")
         
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
             futures = [executor.submit(self.worker_task, i) for i in range(self.num_threads)]
@@ -412,6 +334,7 @@ class ContinuousRegistrationManager:
                     time.sleep(1)
             except KeyboardInterrupt:
                 self.running = False
+                add_log("INFO", "Registration bot stopped")
 
 def main():
     """Main function to run continuous registration"""
