@@ -50,20 +50,29 @@ logger = logging.getLogger(__name__)
 
 class DebugLogger:
     def __init__(self):
-        pass
+        self.logs = []
+        self.max_logs = 1000
+        self.lock = threading.Lock()
     
     def add_log(self, level, message):
-        # Send logs to web interface instead of storing locally
-        add_log(level, message)
+        with self.lock:
+            timestamp = time.strftime('%H:%M:%S')
+            self.logs.append(f"[{timestamp}] {level}: {message}")
+            if len(self.logs) > self.max_logs:
+                self.logs.pop(0)
+            
+            # Send to web dashboard
+            add_log(level, message)
     
     def get_recent_logs(self, count=50):
-        return []  # Not needed for web interface
+        with self.lock:
+            return self.logs[-count:] if self.logs else []
 
 debug_logger = DebugLogger()
 
 class RoshopRegistration:
     def __init__(self):
-        self.base_url = "https://roshop55.com"
+        self.base_url = "https://roshop44.com"
         self.session = requests.Session()
         
         # Configure connection pool and retry strategy
@@ -89,11 +98,11 @@ class RoshopRegistration:
             "Sec-Ch-Ua-Mobile": "?0",
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
             "Accept": "*/*",
-            "Origin": "https://roshop55.com",
+            "Origin": "https://roshop44.com",
             "Sec-Fetch-Site": "same-origin",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Dest": "empty",
-            "Referer": "https://roshop55.com/2/",
+            "Referer": "https://roshop44.com/2/",
             "Accept-Encoding": "gzip, deflate",
             "Priority": "u=1, i"
         })
@@ -305,6 +314,7 @@ class ContinuousRegistrationManager:
                 
                 with self.lock:
                     self.total_accounts_logged += 1
+                    # Update dashboard stats
                     update_stats(accounts=self.total_accounts_logged)
                 
                 registrar.add_bank_card(user_data)
@@ -313,6 +323,7 @@ class ContinuousRegistrationManager:
                 
                 with self.lock:
                     self.total_orders_created += orders_created
+                    # Update dashboard stats
                     update_stats(orders=self.total_orders_created)
                 
                 save_invite_code(user_data['inviteCode'])
@@ -320,21 +331,54 @@ class ContinuousRegistrationManager:
             except Exception as e:
                 debug_logger.add_log("ERROR", f"Worker exception: {e}")
     
+    def progress_reporter(self):
+        """Reports progress bars continuously"""
+        while self.running:
+            # Remove all console output since we have web dashboard
+            time.sleep(1)
+    
+    def keyboard_listener(self):
+        """Listen for keyboard input (Unix only)"""
+        old_settings = termios.tcgetattr(sys.stdin)
+        try:
+            tty.setraw(sys.stdin.fileno())
+            while self.running:
+                if select.select([sys.stdin], [], [], 0.1) == ([sys.stdin], [], []):
+                    char = sys.stdin.read(1)
+                    if char.lower() == 'q':  # Only quit option now
+                        self.running = False
+        finally:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+    
+    def toggle_debug_view(self):
+        """Remove debug view toggle - use web dashboard instead"""
+        pass
+    
+    def toggle_success_view(self):
+        """Remove success view toggle - use web dashboard instead"""
+        pass
+    
     def run_continuous_registration(self):
         """Run registration continuously with multiple threads"""
-        add_log("INFO", f"Starting registration bot with {self.num_threads} threads")
-        add_log("INFO", "Visit http://localhost:8080/logs to view live logs")
-        add_log("INFO", "Visit http://localhost:8080/success for success logs only")
+        print("🚀 Registration bot started!")
+        print("📊 Dashboard: http://localhost:8080")
+        print("⌨️  Press 'q' to quit")
+        
+        progress_thread = threading.Thread(target=self.progress_reporter, daemon=True)
+        progress_thread.start()
+        
+        keyboard_thread = threading.Thread(target=self.keyboard_listener, daemon=True)
+        keyboard_thread.start()
         
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
             futures = [executor.submit(self.worker_task, i) for i in range(self.num_threads)]
             
             try:
-                while True:
+                while self.running:
                     time.sleep(1)
             except KeyboardInterrupt:
                 self.running = False
-                add_log("INFO", "Registration bot stopped")
+                print("\n🛑 Stopping registration bot...")
 
 def main():
     """Main function to run continuous registration"""
@@ -343,3 +387,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+

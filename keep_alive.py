@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request
 from threading import Thread
 import time
 
@@ -26,105 +26,244 @@ def update_stats(accounts=None, orders=None):
         stats["orders"] = orders
 
 @app.route('/')
-def home():
-    return '<meta http-equiv="refresh" content="0; URL=https://phantom.is-a.dev/support"/>'
+def dashboard():
+    """Main dashboard with progress bars and filterable logs"""
+    filter_type = request.args.get('filter', 'all')
+    
+    if filter_type == 'success':
+        filtered_logs = [log for log in logs if "SUCCESS" in log]
+    else:
+        filtered_logs = logs
+    
+    # Calculate progress percentages
+    accounts_progress = min(100, (stats["accounts"] * 2))
+    orders_progress = min(100, (stats["orders"] / 50))
+    
+    html_template = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Registration Bot Dashboard</title>
+        <meta http-equiv="refresh" content="2">
+        <style>
+            body { 
+                font-family: 'Courier New', monospace; 
+                background: #0d1117; 
+                color: #c9d1d9; 
+                margin: 0; 
+                padding: 20px;
+            }
+            .header {
+                text-align: center;
+                margin-bottom: 30px;
+                border-bottom: 2px solid #21262d;
+                padding-bottom: 20px;
+            }
+            .stats-container {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+                margin-bottom: 30px;
+            }
+            .stat-card {
+                background: #161b22;
+                border: 1px solid #30363d;
+                border-radius: 8px;
+                padding: 20px;
+                text-align: center;
+            }
+            .stat-number {
+                font-size: 2.5em;
+                font-weight: bold;
+                color: #58a6ff;
+                margin: 10px 0;
+            }
+            .progress-bar {
+                background: #21262d;
+                height: 25px;
+                border-radius: 12px;
+                margin: 15px 0;
+                overflow: hidden;
+                position: relative;
+            }
+            .progress-fill {
+                background: linear-gradient(90deg, #238636, #2ea043);
+                height: 100%;
+                border-radius: 12px;
+                transition: width 0.5s ease;
+                position: relative;
+            }
+            .progress-text {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                color: white;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            .filter-container {
+                margin-bottom: 20px;
+                text-align: center;
+            }
+            .filter-btn {
+                background: #21262d;
+                border: 1px solid #30363d;
+                color: #c9d1d9;
+                padding: 10px 20px;
+                margin: 0 5px;
+                border-radius: 6px;
+                cursor: pointer;
+                text-decoration: none;
+                display: inline-block;
+                transition: all 0.3s;
+            }
+            .filter-btn:hover {
+                background: #30363d;
+                border-color: #58a6ff;
+            }
+            .filter-btn.active {
+                background: #58a6ff;
+                border-color: #58a6ff;
+                color: white;
+            }
+            .logs-container {
+                background: #0d1117;
+                border: 1px solid #30363d;
+                border-radius: 8px;
+                padding: 20px;
+                height: 60vh;
+                overflow-y: auto;
+            }
+            .log-entry {
+                padding: 8px 12px;
+                margin: 2px 0;
+                border-radius: 4px;
+                border-left: 3px solid transparent;
+                font-family: 'Courier New', monospace;
+                font-size: 13px;
+            }
+            .log-success {
+                background: rgba(35, 134, 54, 0.1);
+                border-left-color: #2ea043;
+                color: #7ee787;
+            }
+            .log-error {
+                background: rgba(248, 81, 73, 0.1);
+                border-left-color: #f85149;
+                color: #ffa198;
+            }
+            .log-info {
+                background: rgba(88, 166, 255, 0.1);
+                border-left-color: #58a6ff;
+                color: #79c0ff;
+            }
+            .footer {
+                text-align: center;
+                margin-top: 20px;
+                color: #8b949e;
+                font-size: 12px;
+            }
+            .emoji {
+                font-size: 1.2em;
+                margin-right: 8px;
+            }
+            ::-webkit-scrollbar {
+                width: 8px;
+            }
+            ::-webkit-scrollbar-track {
+                background: #161b22;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: #30363d;
+                border-radius: 4px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: #484f58;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1><span class="emoji">🤖</span>Registration Bot Dashboard</h1>
+            <p>Real-time monitoring and statistics</p>
+        </div>
+        
+        <div class="stats-container">
+            <div class="stat-card">
+                <h3><span class="emoji">👥</span>Accounts Created</h3>
+                <div class="stat-number">{{ stats.accounts }}</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ accounts_progress }}%">
+                        <div class="progress-text">{{ accounts_progress }}%</div>
+                    </div>
+                </div>
+                <small>Target: 50 accounts</small>
+            </div>
+            
+            <div class="stat-card">
+                <h3><span class="emoji">💳</span>Orders Created</h3>
+                <div class="stat-number">{{ stats.orders }}</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ orders_progress }}%">
+                        <div class="progress-text">{{ orders_progress | round(1) }}%</div>
+                    </div>
+                </div>
+                <small>Target: 5000 orders</small>
+            </div>
+        </div>
+        
+        <div class="filter-container">
+            <h3><span class="emoji">📊</span>Activity Logs</h3>
+            <a href="/?filter=all" class="filter-btn {% if filter_type == 'all' %}active{% endif %}">
+                <span class="emoji">📋</span>All Logs
+            </a>
+            <a href="/?filter=success" class="filter-btn {% if filter_type == 'success' %}active{% endif %}">
+                <span class="emoji">✅</span>Success Only
+            </a>
+        </div>
+        
+        <div class="logs-container">
+            {% if filtered_logs %}
+                {% for log in filtered_logs[-100:] %}
+                    <div class="log-entry {% if 'SUCCESS' in log %}log-success{% elif 'ERROR' in log %}log-error{% else %}log-info{% endif %}">
+                        {{ log }}
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="log-entry log-info">
+                    <span class="emoji">⏳</span>Waiting for logs...
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="footer">
+            <p>Last updated: {{ current_time }} | Auto-refresh every 2 seconds</p>
+            <p><span class="emoji">🔗</span>Dashboard URL: <code>http://localhost:8080</code></p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
+    return render_template_string(html_template, 
+                                logs=logs, 
+                                stats=stats, 
+                                current_time=current_time,
+                                filter_type=filter_type,
+                                filtered_logs=filtered_logs,
+                                accounts_progress=accounts_progress,
+                                orders_progress=orders_progress)
 
 @app.route('/logs')
 def show_logs():
-    """Display logs in real-time"""
-    html_template = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Registration Logs</title>
-        <meta http-equiv="refresh" content="2">
-        <style>
-            body { font-family: monospace; background: #1a1a1a; color: #00ff00; margin: 20px; }
-            .stats { background: #333; padding: 10px; margin-bottom: 20px; border-radius: 5px; }
-            .log-container { background: #000; padding: 15px; border-radius: 5px; height: 70vh; overflow-y: auto; }
-            .success { color: #00ff00; }
-            .error { color: #ff4444; }
-            .info { color: #4488ff; }
-            .progress-bar { background: #333; height: 20px; border-radius: 10px; margin: 5px 0; }
-            .progress-fill { background: #00ff00; height: 100%; border-radius: 10px; transition: width 0.3s; }
-        </style>
-    </head>
-    <body>
-        <h1>🤖 Registration Bot Status</h1>
-        
-        <div class="stats">
-            <h3>📊 Statistics</h3>
-            <p>Accounts Created: <strong>{{ stats.accounts }}</strong></p>
-            <div class="progress-bar">
-                <div class="progress-fill" style="width: {{ (stats.accounts // 10) | min(100) }}%"></div>
-            </div>
-            
-            <p>Orders Created: <strong>{{ stats.orders }}</strong></p>
-            <div class="progress-bar">
-                <div class="progress-fill" style="width: {{ (stats.orders // 100) | min(100) }}%"></div>
-            </div>
-        </div>
-        
-        <div class="log-container">
-            <h3>📝 Live Logs (Auto-refresh every 2 seconds)</h3>
-            {% for log in logs[-50:] %}
-                <div class="{% if 'SUCCESS' in log %}success{% elif 'ERROR' in log %}error{% else %}info{% endif %}">
-                    {{ log }}
-                </div>
-            {% endfor %}
-        </div>
-        
-        <p><em>Last updated: {{ current_time }}</em></p>
-    </body>
-    </html>
-    """
-    
-    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-    return render_template_string(html_template, logs=logs, stats=stats, current_time=current_time)
+    """Redirect to main dashboard"""
+    return dashboard()
 
 @app.route('/success')
 def show_success_only():
-    """Display only success logs"""
-    html_template = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Success Logs</title>
-        <meta http-equiv="refresh" content="2">
-        <style>
-            body { font-family: monospace; background: #1a1a1a; color: #00ff00; margin: 20px; }
-            .stats { background: #333; padding: 10px; margin-bottom: 20px; border-radius: 5px; }
-            .log-container { background: #000; padding: 15px; border-radius: 5px; height: 70vh; overflow-y: auto; }
-            .success { color: #00ff00; }
-            .progress-bar { background: #333; height: 20px; border-radius: 10px; margin: 5px 0; }
-            .progress-fill { background: #00ff00; height: 100%; border-radius: 10px; transition: width 0.3s; }
-        </style>
-    </head>
-    <body>
-        <h1>✅ Success Logs Only</h1>
-        
-        <div class="stats">
-            <h3>📊 Statistics</h3>
-            <p>Accounts Created: <strong>{{ stats.accounts }}</strong></p>
-            <p>Orders Created: <strong>{{ stats.orders }}</strong></p>
-            <p><a href="/logs" style="color: #4488ff;">View All Logs</a></p>
-        </div>
-        
-        <div class="log-container">
-            <h3>🎉 Success Logs (Auto-refresh every 2 seconds)</h3>
-            {% for log in success_logs[-50:] %}
-                <div class="success">{{ log }}</div>
-            {% endfor %}
-        </div>
-        
-        <p><em>Last updated: {{ current_time }}</em></p>
-    </body>
-    </html>
-    """
-    
-    success_logs = [log for log in logs if "SUCCESS" in log]
-    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-    return render_template_string(html_template, success_logs=success_logs, stats=stats, current_time=current_time)
+    """Redirect to success filter"""
+    return dashboard() + "?filter=success"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -136,4 +275,5 @@ def keep_alive():
 
 # Export functions for use in main script
 __all__ = ['keep_alive', 'add_log', 'update_stats']
+
 
