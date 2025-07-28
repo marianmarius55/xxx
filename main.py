@@ -72,7 +72,7 @@ debug_logger = DebugLogger()
 
 class RoshopRegistration:
     def __init__(self):
-        self.base_url = "https://roshop55.com"
+        self.base_url = "https://rmshopp11.com"
         self.session = requests.Session()
         
         # Configure connection pool and retry strategy
@@ -98,11 +98,11 @@ class RoshopRegistration:
             "Sec-Ch-Ua-Mobile": "?0",
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
             "Accept": "*/*",
-            "Origin": "https://roshop55.com",
+            "Origin": "https://rmshopp11.com",
             "Sec-Fetch-Site": "same-origin",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Dest": "empty",
-            "Referer": "https://roshop55.com/2/",
+            "Referer": "https://rmshopp11.com/2/",
             "Accept-Encoding": "gzip, deflate",
             "Priority": "u=1, i"
         })
